@@ -1,0 +1,14 @@
+# ============================
+# Cowrie + ELK STACK -
+
+# Cowrie Data 
+
+logs/
+downloads/
+
+# ELK DATA
+logstash_ingest_data/
+filebeat_ingest_data/
+
+
+
