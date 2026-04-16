@@ -3,39 +3,43 @@
 
 # Configuration
 
-set timeout 20
+set timeout 10
 set host "localhost"
 set port "2224"
 set user "root"
 set pass "12345"
 
-# SSH Connection
+set iterations 2
 
-spawn ssh -p $port $user@$host
-expect "password:"
-send "§pass\r"
-expect "$ " 
+
+for {set i 1} {$i <= $iterations} {incr i} {
+
+# connection to ssh
+	spawn ssh -p $port $user@$host
+	expect "password:"
+	send "§pass\r"
+	expect "$ " 
 
 # Commands
-set commands {
-	"ls -la"
-	"cat /etc/passwd"
-	"uname -a"
-	"whoami"
-	"ps aux"
+	set commands {
+		"ls -la"
+		"cat /etc/passwd"
+		"uname -a"
+		"whoami"
+		"ps aux"
 	
-}
+	}
 
 # loop for commands
-foreach cmd $commands {
-	puts "\n[>] Sending: $cmd"
-	send "$cmd\r"
-	expect "$ "
-	sleep 1
+	foreach cmd $commands {
+		send "$cmd\r"
+		expect "$ "
+		sleep 1
+	}
+
+	send "exit\r"
+	expect eof
 }
 
-send "exit\r"
-expect eof
-
-puts "\n[+] Done"
+puts "\n Done"
 
