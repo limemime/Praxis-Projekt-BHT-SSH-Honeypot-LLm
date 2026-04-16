@@ -11,7 +11,7 @@ set pass "12345"
 spawn ssh -p $port $user@$host
 expect "password:"
 send "$pass\r"
-expect "$ "  ;# Wait for the shell prompt (e.g., root@cowrie:~#)
+expect "$ "  ;# Wait for shell prompt
 
 # Define commands
 set commands {
