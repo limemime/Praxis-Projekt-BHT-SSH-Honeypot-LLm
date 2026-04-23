@@ -16,6 +16,9 @@ volumes:
    driver: local
  fleetserverdata:
    driver: local
+ # Persistent storage for the vector database
+ chromadata:
+   driver: local
 
 
 networks:
@@ -323,3 +326,33 @@ services:
       - ./downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
    networks:
       - elastic
+
+ # --- RAG Enhancement Services ---
+
+ # The RAG Proxy handles LangChain logic, HuggingFace embeddings, and prompt construction
+ rag-proxy:
+   container_name: rag-proxy
+   build:
+     context: ./rag_proxy
+   depends_on:
+     - chromadb
+   environment:
+     # Tell the proxy where to find the vector database
+     - CHROMA_HOST=chromadb
+     # Authentication for HuggingFace Hub (used for inference/embeddings)
+     - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
+   networks:
+     - elastic
+   ports:
+     - "8001:8000"
+
+ # ChromaDB stores our "knowledge base" (vulnerable Linux docs) as vectors for quick search
+ chromadb:
+   container_name: chromadb
+   image: chromadb/chroma:latest
+   volumes:
+     - chromadata:/chroma/data
+   networks:
+     - elastic
+   ports:
+     - "8002:8000"
