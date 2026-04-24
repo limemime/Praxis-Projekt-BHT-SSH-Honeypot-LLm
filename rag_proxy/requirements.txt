@@ -5,6 +5,7 @@ uvicorn>=0.24.0
 # LangChain core for RAG orchestration
 langchain>=0.1.0
 langchain-core
+langchain-community
 # LangChain integration for HuggingFace models and embeddings
 langchain-huggingface
 # ChromaDB client to communicate with our vector database
@@ -18,7 +19,7 @@ python-dotenv>=1.0.0
 # PyTorch: The core library for running deep learning models locally
 torch
 # Transformers: Library to load and run LLMs like Phi-3
-transformers
+transformers>=4.41.0
 # Accelerate: Optimizes model loading and inference speed
 accelerate
 # Bitsandbytes: Enables 4-bit quantization to shrink the model size
