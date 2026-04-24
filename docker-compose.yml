@@ -345,7 +345,7 @@ services:
      # Tell the proxy where to find the vector database
      - CHROMA_HOST=chromadb
      # Authentication for HuggingFace Hub (used for inference/embeddings)
-     - HUGGINGFACE_API_TOKEN=${HUGGINGFACE_API_TOKEN}
+     - HF_TOKEN=${HUGGINGFACE_API_TOKEN}
    networks:
      - elastic
    ports:
