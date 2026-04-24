@@ -33,7 +33,8 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     device_map="auto", # Automatically detects if a GPU is available, otherwise uses CPU
     torch_dtype="auto", # Sets the numeric precision automatically
-    trust_remote_code=True # Required for many newer models like Phi-3
+    trust_remote_code=True, # Required for many newer models like Phi-3
+    attn_implementation="eager" # Use standard attention to avoid flash-attention warning/error
 )
 
 # Create the local text generation pipeline
