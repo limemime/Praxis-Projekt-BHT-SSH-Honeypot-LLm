@@ -88,6 +88,10 @@ services:
        echo "Setting kibana_system password";
        curl -s -X POST --cacert config/certs/ca/ca.crt -u "elastic:${ELASTIC_PASSWORD}" -H "Content-Type: application/json" https://es01:9200/_security/user/kibana_system/_password -d "{\"password\":\"${KIBANA_PASSWORD}\"}" | grep -q "^{}";
        echo "All done!";
+       echo "--------------------------------------------------------------------------------";
+       echo "FLEET CA FINGERPRINT:";
+       openssl x509 -fingerprint -sha256 -noout -in config/certs/ca/ca.crt | sed 's/://g' | cut -d'=' -f2;
+       echo "--------------------------------------------------------------------------------";
      '
    healthcheck:
      test: ["CMD-SHELL", "[ -f config/certs/es01/es01.crt ]"]
@@ -158,6 +162,7 @@ services:
      - XPACK_REPORTING_ENCRYPTIONKEY=${ENCRYPTION_KEY}
      - XPACK_REPORTING_KIBANASERVER_HOSTNAME=localhost
      - ELASTIC_APM_SECRET_TOKEN=${ELASTIC_APM_SECRET_TOKEN}
+     - FLEET_CA_FINGERPRINT=${FLEET_CA_FINGERPRINT}
    networks:
      - elastic  
    healthcheck:
