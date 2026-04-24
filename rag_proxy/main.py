@@ -5,8 +5,11 @@ from pydantic import BaseModel # Data validation for incoming requests
 from typing import List # Type hinting for better code structure
 import chromadb # Client for our vector database
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline # LangChain tools for local HF models
+import transformers
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline # Tools to load and run the model locally
 from langchain_core.prompts import PromptTemplate # Helps structure our "You are a SSH" instructions
+
+print(f"DEBUG: Transformers version: {transformers.__version__}")
 
 # Initialize the FastAPI web server
 app = FastAPI()
