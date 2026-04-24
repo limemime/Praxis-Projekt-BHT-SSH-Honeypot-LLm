@@ -4,6 +4,7 @@ fastapi>=0.104.1
 uvicorn>=0.24.0
 # LangChain core for RAG orchestration
 langchain>=0.1.0
+langchain-core
 # LangChain integration for HuggingFace models and embeddings
 langchain-huggingface
 # ChromaDB client to communicate with our vector database

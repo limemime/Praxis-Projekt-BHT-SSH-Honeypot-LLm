@@ -6,7 +6,7 @@ from typing import List # Type hinting for better code structure
 import chromadb # Client for our vector database
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline # LangChain tools for local HF models
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline # Tools to load and run the model locally
-from langchain.prompts import PromptTemplate # Helps structure our "You are a SSH" instructions
+from langchain_core.prompts import PromptTemplate # Helps structure our "You are a SSH" instructions
 
 # Initialize the FastAPI web server
 app = FastAPI()
