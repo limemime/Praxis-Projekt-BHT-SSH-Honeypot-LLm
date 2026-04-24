@@ -34,7 +34,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto", # Automatically detects if a GPU is available, otherwise uses CPU
     torch_dtype="auto", # Sets the numeric precision automatically
     trust_remote_code=True, # Required for many newer models like Phi-3
-    attn_implementation="sdpa" # Use Scaled Dot Product Attention (PyTorch native fallback)
+    attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
 )
 
 # Create the local text generation pipeline
