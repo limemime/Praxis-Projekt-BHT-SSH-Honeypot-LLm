@@ -1,19 +1,19 @@
 # FastAPI framework for building the web API
-fastapi==0.104.1
+fastapi>=0.104.1
 # Uvicorn server to run the FastAPI application
-uvicorn==0.24.0
+uvicorn>=0.24.0
 # LangChain core for RAG orchestration
-langchain==0.0.350
+langchain>=0.1.0
 # LangChain integration for HuggingFace models and embeddings
-langchain-huggingface==0.0.1
+langchain-huggingface
 # ChromaDB client to communicate with our vector database
-chromadb==0.4.18
+chromadb>=0.4.18
 # Sentence Transformers for converting text into vector embeddings
-sentence-transformers==2.2.2
+sentence-transformers>=2.2.2
 # Pydantic for data validation and settings management
-pydantic==2.5.2
+pydantic>=2.5.2
 # Python-dotenv for reading environment variables from .env files
-python-dotenv==1.0.0
+python-dotenv>=1.0.0
 # PyTorch: The core library for running deep learning models locally
 torch
 # Transformers: Library to load and run LLMs like Phi-3
