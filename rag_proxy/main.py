@@ -36,6 +36,7 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     device_map="auto", # Automatically detects if a GPU is available, otherwise uses CPU
     torch_dtype="auto", # Sets the numeric precision automatically
+    load_in_4bit=True, # Enable 4-bit quantization
     trust_remote_code=False, # Use the stable, native transformers implementation and works ofr models like pHi-3
     attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
 )
@@ -45,7 +46,7 @@ local_pipe = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
-    max_new_tokens=500, # Limits the length of the shell output
+    max_new_tokens=150, # Limits the length of the shell output for faster responses
     temperature=0.1, # Makes the AI more literal and less creative
     top_p=0.9, # Sampling setting for better output diversity
     repetition_penalty=1.1 # Prevents the AI from repeating the same text
