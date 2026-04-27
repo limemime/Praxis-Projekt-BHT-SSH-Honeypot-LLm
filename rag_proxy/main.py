@@ -36,7 +36,11 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     device_map="auto", # Automatically detects if a GPU is available, otherwise uses CPU
     torch_dtype="auto", # Sets the numeric precision automatically
+<<<<<<< HEAD
     trust_remote_code=False, # Use the stable, native transformers implementation
+=======
+    trust_remote_code=False, # Required for many newer models like Phi-3
+>>>>>>> 55e64ac (Rag dependencies work, env is exluded, gitignore modified)
     attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
 )
 
