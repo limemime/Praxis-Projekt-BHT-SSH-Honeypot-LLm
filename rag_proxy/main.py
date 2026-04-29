@@ -46,6 +46,7 @@ local_pipe = pipeline(
     model=model,
     tokenizer=tokenizer,
     max_new_tokens=150, # Limits the length of the shell output for faster responses
+    max_length=None, # Resolves conflict with max_new_tokens
     temperature=0.1, # Makes the AI more literal and less creative
     top_p=0.9, # Sampling setting for better output diversity
     repetition_penalty=1.1 # Prevents the AI from repeating the same text
