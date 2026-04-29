@@ -29,7 +29,7 @@ collection = chroma_client.get_or_create_collection(name="ssh_knowledge")
 model_id = "microsoft/Phi-3-mini-4k-instruct"
 
 # Load the tokenizer (turns text into IDs the model understands)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained(model_id, clean_up_tokenizer_spaces=False)
 
 # Load the actual model with 4-bit quantization to save RAM
 model = AutoModelForCausalLM.from_pretrained(
