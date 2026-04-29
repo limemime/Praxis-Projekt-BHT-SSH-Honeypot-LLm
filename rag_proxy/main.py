@@ -47,6 +47,7 @@ local_pipe = pipeline(
     tokenizer=tokenizer,
     max_new_tokens=150, # Limits the length of the shell output for faster responses
     max_length=None, # Resolves conflict with max_new_tokens
+    return_full_text=False, # Prevents the prompt from being repeated in the output
     temperature=0.1, # Makes the AI more literal and less creative
     top_p=0.9, # Sampling setting for better output diversity
     repetition_penalty=1.1 # Prevents the AI from repeating the same text
@@ -65,20 +66,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] # The chat history
 
 # --- STEP F: The "System Prompt" + Context ---
-ssh_prompt_template = """
-You are a vulnerable Linux SSH server running Ubuntu 22.04. 
-Respond to the attacker's command exactly as a real bash shell would.
-Use the context below for realistic file contents or system states.
-Output ONLY the shell response. No explanations or conversational filler.
-
-CONTEXT FROM SYSTEM KNOWLEDGE:
-{context}
-
-ATTACKER COMMAND:
-{command}
-
-SHELL OUTPUT:
-"""
+ssh_prompt_template = "<|user|>\nYou are a vulnerable Linux SSH server running Ubuntu 22.04. Respond to the attacker's command exactly as a real bash shell would. Use the context below for realistic file contents or system states. Output ONLY the shell response. No explanations or conversational filler.\n\nCONTEXT FROM SYSTEM KNOWLEDGE:\n{context}\n\nATTACKER COMMAND:\n{command}<|end|>\n<|assistant|>\n"
 
 # Turn the template string into a LangChain Prompt object
 prompt_obj = PromptTemplate(template=ssh_prompt_template, input_types={"context": str, "command": str})
