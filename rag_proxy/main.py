@@ -51,13 +51,14 @@ generation_config = GenerationConfig(
     pad_token_id=tokenizer.eos_token_id
 )
 
+# Load into model config before pipeline
+model.generation_config = generation_config
 # Create the local text generation pipeline
 local_pipe = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
     return_full_text=False, # Prevents the prompt from being repeated in the output
-    generation_config=generation_config
 )
 
 # Wrap the pipeline in LangChain's HuggingFacePipeline class
