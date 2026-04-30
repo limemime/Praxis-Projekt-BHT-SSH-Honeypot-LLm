@@ -9,7 +9,7 @@ set port "2224"
 set user "root"
 set pass "12345"
 
-set iterations 2
+set iterations 5
 
 
 for {set i 1} {$i <= $iterations} {incr i} {
