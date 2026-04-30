@@ -6,10 +6,9 @@ from typing import List # Type hinting for better code structure
 import chromadb # Client for our vector database
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline # LangChain tools for local HF models
 import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, GenerationConfig # Tools to load and run the model locally
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline # Tools to load and run the model locally
 from langchain_core.prompts import PromptTemplate # Helps structure our "You are a SSH" instructions
 
-print(f"DEBUG: Transformers version: {transformers.__version__}")
 
 # Initialize the FastAPI web server
 app = FastAPI()
@@ -40,25 +39,20 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
 )
 
-# Create a generation configuration object to resolve deprecation warnings
-generation_config = GenerationConfig(
-    max_new_tokens=150,
-    max_length=None, # Resolves conflict with max_new_tokens
-    temperature=0.1, # Makes the AI more literal and less creative
-    top_p=0.9, # Sampling setting for better output diversity
-    repetition_penalty=1.1, # Prevents the AI from repeating the same text
-    do_sample=True, # Required when using temperature or top_p
-    pad_token_id=tokenizer.eos_token_id
-)
 
-# Load into model config before pipeline
-model.generation_config = generation_config
 # Create the local text generation pipeline
 local_pipe = pipeline(
     "text-generation",
     model=model,
     tokenizer=tokenizer,
+    max_new_tokens=150,
+    max_length=None, # Resolves conflict with max_new_tokens
     return_full_text=False, # Prevents the prompt from being repeated in the output
+    temperature=0.1, # Makes the AI more literal and less creative
+    top_p=0.9, # Sampling setting for better output diversity
+    repetition_penalty=1.1, # Prevents the AI from repeating the same text
+    #do_sample=True, # Required when using temperature or top_p
+    #pad_token_id=tokenizer.eos_token_id
 )
 
 # Wrap the pipeline in LangChain's HuggingFacePipeline class
