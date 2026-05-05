@@ -68,40 +68,74 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage] # The chat history
 
 # --- STEP F: The "System Prompt" + Context ---
-ssh_prompt_template = "<|user|>\nYou are a vulnerable Linux SSH server running Ubuntu 22.04. Respond to the attacker's command exactly as a real bash shell would. Use the context below for realistic file contents or system states. Output ONLY the shell response. No explanations or conversational filler.\n\nCONTEXT FROM SYSTEM KNOWLEDGE:\n{context}\n\nATTACKER COMMAND:\n{command}<|end|>\n<|assistant|>\n"
+# We added a {history} block so the AI remembers what it said 5 minutes ago
+ssh_prompt_template = """<|user|>
+You are a vulnerable Linux SSH server running Ubuntu 22.04. 
+Respond to the attacker's command exactly as a real bash shell would.
+Use the context below for realistic file contents or system states.
+Output ONLY the shell response. No explanations or conversational filler.
+
+CONTEXT FROM SYSTEM KNOWLEDGE:
+{context}
+
+CONVERSATION HISTORY:
+{history}
+
+ATTACKER COMMAND:
+{command}<|end|>
+<|assistant|>
+"""
 
 # Turn the template string into a LangChain Prompt object
-prompt_obj = PromptTemplate(template=ssh_prompt_template, input_types={"context": str, "command": str})
+prompt_obj = PromptTemplate(template=ssh_prompt_template, input_types={"context": str, "history": str, "command": str})
 
 # --- STEP E, F, G, H: Main Route ---
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    # Get the latest command typed by the attacker
+    # 1. Get the latest command and format the history
     user_command = request.messages[-1].content
     
-    # --- STEP D & E: Similarity Search ---
-    # Query ChromaDB for the 3 most relevant bits of knowledge
+    # We take the last 6 messages to give the AI "short-term memory"
+    # This prevents it from forgetting the files it showed in 'ls' earlier
+    history_lines = []
+    for msg in request.messages[:-1]:
+        prefix = "Attacker: " if msg.role == "user" else "Shell: "
+        history_lines.append(f"{prefix}{msg.content}")
+    formatted_history = "\n".join(history_lines[-6:]) # Keep last 6 exchanges
+
+    # 2. --- STEP D & E: Similarity Search + Context PINNING ---
+    # We ALWAYS include the root directory structure so 'ls' is consistent
+    try:
+        pinned_result = collection.get(ids=["root_ls"])
+        pinned_context = pinned_result['documents'][0] if pinned_result['documents'] else ""
+    except Exception:
+        pinned_context = ""
+
+    # Dynamic search for the specific command
     results = collection.query(
         query_texts=[user_command],
         n_results=3
     )
+    dynamic_context = "\n".join([doc for sublist in results['documents'] for doc in sublist])
     
-    # Combine retrieved documents into a context block
-    retrieved_context = "\n".join([doc for sublist in results['documents'] for doc in sublist])
+    # Combine pinned + dynamic knowledge
+    full_context = f"BASELINE SYSTEM STATE:\n{pinned_context}\n\nRELEVANT DETAILS:\n{dynamic_context}"
     
-    # --- STEP F & G: Generating the Answer ---
-    # Format the prompt and run it through the local model pipeline
-    final_prompt = prompt_obj.format(context=retrieved_context, command=user_command)
+    # 3. --- STEP F & G: Generating the Answer ---
+    final_prompt = prompt_obj.format(
+        context=full_context, 
+        history=formatted_history, 
+        command=user_command
+    )
     ai_response = llm.invoke(final_prompt)
     
     # --- STEP H: Sending back to Cowrie ---
-    # Wrap result in JSON format Cowrie expects (mimics OpenAI response)
     return {
         "choices": [
             {
                 "message": {
                     "role": "assistant",
-                    "content": ai_response.strip() # Remove whitespace from AI output
+                    "content": ai_response.strip()
                 }
             }
         ]
