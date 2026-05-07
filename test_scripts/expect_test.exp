@@ -17,7 +17,7 @@ for {set i 1} {$i <= $iterations} {incr i} {
 # connection to ssh
 	spawn ssh -p $port $user@$host
 	expect "password:"
-	send "§pass\r"
+	send "$pass\r"
 	expect "$ " 
 
 # Commands
