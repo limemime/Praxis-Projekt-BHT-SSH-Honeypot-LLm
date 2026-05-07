@@ -6,7 +6,7 @@ from typing import List # Type hinting for better code structure
 import chromadb # Client for our vector database
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline # LangChain tools for local HF models
 import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline # Tools to load and run the model locally
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig # Tools to load and run the model locally
 from langchain_core.prompts import PromptTemplate # Helps structure our "You are a SSH" instructions
 
 
@@ -28,12 +28,21 @@ collection = chroma_client.get_or_create_collection(name="ssh_knowledge")
 model_id = "microsoft/Phi-3-mini-4k-instruct"
 
 # Load the tokenizer (turns text into IDs the model understands)
-tokenizer = AutoTokenizer.from_pretrained(model_id, clean_up_tokenization_spaces=False)
+tokenizer = AutoTokenizer.from_pretrained(model_id, clean_up_tokenizer_spaces=False)
 
-# Load the actual model with 4-bit quantization to save RAM
+# Configure 4-bit quantization
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32
+)
+
+# Load the actual model with 4-bit quantization to save RAM and speed up loading
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     device_map="auto", # Automatically detects if a GPU is available, otherwise uses CPU
+    quantization_config=bnb_config,
     torch_dtype="auto", # Sets the numeric precision automatically
     trust_remote_code=False, # Use the stable, native transformers implementation and works ofr models like pHi-3
     attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
