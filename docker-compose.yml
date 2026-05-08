@@ -350,6 +350,13 @@ services:
      - elastic
    ports:
      - "8001:8000"
+   deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: all
+             capabilities: [gpu]
 
  # ChromaDB stores our "knowledge base" (vulnerable Linux docs) as vectors for quick search
  chromadb:
