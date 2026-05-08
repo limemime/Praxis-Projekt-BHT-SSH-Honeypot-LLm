@@ -24,8 +24,9 @@ chroma_client = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "chromadb"), p
 collection = chroma_client.get_or_create_collection(name="ssh_knowledge")
 
 # --- STEP G: Setup LOCAL LLM (Offline) ---
-# We use Phi-3-mini because it is small (approx 2.3GB) and smart
-model_id = "microsoft/Phi-3-mini-4k-instruct"
+# We changed Phi-3-mini because it need to muchvram from gpu and now
+# have qwen
+model_id = "Qwen/Qwen2.5-1.5B-Instruct"
 
 # Load the tokenizer (turns text into IDs the model understands)
 tokenizer = AutoTokenizer.from_pretrained(model_id, clean_up_tokenizer_spaces=False)
@@ -45,7 +46,7 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=bnb_config,
     torch_dtype="auto", # Sets the numeric precision automatically
     trust_remote_code=False, # Use the stable, native transformers implementation and works ofr models like pHi-3
-    attn_implementation="eager" # Suggested by the model to avoid flash-attention warnings
+    attn_implementation="sdpa" # for Phi, "eager" was Suggested by the model to avoid flash-attention warnings
 )
 
 
@@ -78,21 +79,22 @@ class ChatRequest(BaseModel):
 
 # --- STEP F: The "System Prompt" + Context ---
 # We added a {history} block so the AI remembers what it said 5 minutes ago
-ssh_prompt_template = """<|user|>
+ssh_prompt_template = """<|im_start|>system
 You are a vulnerable Linux SSH server running Ubuntu 22.04. 
 Respond to the attacker's command exactly as a real bash shell would.
 Use the context below for realistic file contents or system states.
 Output ONLY the shell response. No explanations or conversational filler.
 
 CONTEXT FROM SYSTEM KNOWLEDGE:
-{context}
+{context}<|im_end|>
+<|im_start|>user
 
 CONVERSATION HISTORY:
 {history}
 
 ATTACKER COMMAND:
-{command}<|end|>
-<|assistant|>
+{command}<|im_end|>
+<|im_start|>assistant
 """
 
 # Turn the template string into a LangChain Prompt object
