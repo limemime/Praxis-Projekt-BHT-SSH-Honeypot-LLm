@@ -327,6 +327,7 @@ services:
       - "2225:2223"
    volumes:
       - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
+      - ./llm_modified.py:/cowrie/cowrie-git/src/cowrie/backend/llm.py
       - ./logs:/cowrie/cowrie-git/var/log/cowrie
       - ./downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
    networks:

@@ -213,3 +213,45 @@ class LLMClient:
 
         log.err(f"Unexpected LLM response format: {response}")
         return ""
+
+
+from cowrie.shell.backend import Backend as BaseBackend
+
+
+class Backend(BaseBackend):
+    """
+    Cowrie Backend that uses an LLM for command simulation.
+    """
+
+    def __init__(self, core: Any) -> None:
+        super().__init__(core)
+        self.llm_client = LLMClient()
+
+    @inlineCallbacks
+    def runCommand(self, cmd: str) -> Generator[Deferred[Any], Any, str]:
+        """
+        Runs a command through the LLM backend.
+        """
+        # 1. Explicitly trap exit/logout to close the session
+        if cmd.strip().lower() in ("exit", "logout"):
+            if self.protocol and self.protocol.terminal:
+                self.protocol.terminal.write("logout\r\n")
+            if self.protocol:
+                self.protocol.loseConnection()
+            return defer.succeed("")
+
+        # 2. Get the response from the LLM
+        prompt = [
+            "You are a bash shell. Respond to the command.",
+            f"User: {cmd}"
+        ]
+
+        response = yield self.llm_client.get_response(prompt)
+
+        # 3. Handle specific exit tokens from the RAG proxy
+        if response.strip().lower() == "exit":
+            if self.protocol:
+                self.protocol.loseConnection()
+            return ""
+
+        return response

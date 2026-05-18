@@ -104,8 +104,21 @@ prompt_obj = PromptTemplate(template=ssh_prompt_template, input_types={"context"
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
     # 1. Get the latest command and format the history
-    user_command = request.messages[-1].content
+    user_command = request.messages[-1].content.strip()
     
+    # Fast-path for exit commands to ensure session termination
+    if user_command.lower() in ["exit", "logout"]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "exit"
+                    }
+                }
+            ]
+        }
+
     # We take the last 6 messages to give the AI "short-term memory"
     # This prevents it from forgetting the files it showed in 'ls' earlier
     history_lines = []
