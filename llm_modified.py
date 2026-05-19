@@ -192,6 +192,35 @@ class LLMClient:
         Returns:
             The LLM's response text, or empty string on error.
         """
+
+        """---Conditioanl to intercept ---"""
+        if prompt and isinstance(prompt, list):
+            last_message = prompt[-1].strip().lower()
+
+            if "exit" in last_message or "logout" in last_message:
+                log.msg("Exit command detected.Forcing disconnect")
+
+                """from twisted.cred.error import UnauthorizedLogin
+                raise UnauthorizedLogin("User requeste session termination.")"""
+               
+                try:
+                    import gc
+                    # Track down active Honeypot Transport sessions currently inside memory
+                    for obj in gc.get_objects():
+                        obj_name = obj.__class__.__name__
+                        if "HoneyPotSSHTransport" in obj_name or "HoneyPotTelnetTransport" in obj_name:
+                            # Verify it has a valid loseConnection method and run it
+                            if hasattr(obj, 'loseConnection') and getattr(obj, 'connected', False) == True:
+                                # Verify the underlying socket writer state exists to prevent NoneType errors
+                                if hasattr(obj, 'transport') and obj.transport is not None:
+                                    obj.loseConnection()
+                                    log.msg(f"Successfully dropped active session object: {obj_name}")
+                except Exception as e:
+                    log.err(f"Failed to drop session inside memory sweep: {e}")
+                
+                return ""  # Exit the loop sa
+                        
+
         status_code, response = yield self._send_request(prompt)
 
         if status_code != 200:
