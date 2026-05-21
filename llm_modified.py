@@ -192,6 +192,28 @@ class LLMClient:
         Returns:
             The LLM's response text, or empty string on error.
         """
+        """ ---Fixing Tiemout due to inactivity, sedd alive signal
+
+        """
+
+        try:
+            import gc
+            for obj in gc.get_objects():
+                obj_name = obj.__class__.__name__
+                if "HoneyPotSSHTransport" in obj_name or "HoneyPotTelnetTransport" in obj_name:
+                    if hasattr(obj, 'resetTimeout') and getattr(obj, 'connected', False) == True:
+                        
+                        # 1. Reset the underlying Twisted transport timer
+                        obj.resetTimeout()
+                        
+                        # 2. Force clear any channel closure signals hidden in the object dictionary
+                        if hasattr(obj, 'avatar') and obj.avatar:
+                            # Keep Cowrie from releasing the virtual user profile privileges
+                            setattr(obj, '_disconnecting', False)
+                        
+                        log.msg("Active user interaction detected via RAG Proxy. Extinguishing exit-state triggers.")
+        except Exception as te:
+            log.err(f"Failed to clear transport exit statuses: {te}")
 
         """---Conditioanl to intercept ---"""
         if prompt and isinstance(prompt, list):
