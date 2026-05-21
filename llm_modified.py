@@ -203,56 +203,62 @@ class LLMClient:
             new_timeout = CowrieConfig.getint("honeypot", "idle_timeout", fallback=1000)
             
             for obj in gc.get_objects():
+                # Skip common types to speed up
+                if isinstance(obj, (dict, list, tuple, str, int, float, bool)) or obj is None:
+                    continue
+
                 klass_name = obj.__class__.__name__
-                if "HoneyPotSSHTransport" in klass_name or "HoneyPotTelnetTransport" in klass_name:
-                    if getattr(obj, 'connected', False):
-                        # Force update the timeout value from config
-                        for attr in ['idle_timeout', 'timeout', '_timeout']:
-                            if hasattr(obj, attr):
-                                setattr(obj, attr, new_timeout)
-                        
-                        # Call reset methods on transport
+                
+                # Broad search for anything that looks like a timeout or transport
+                if any(x in klass_name for x in ["Transport", "Protocol", "Session", "HoneyPot"]):
+                    # If it has a timeout attribute set to roughly 180, force it to new_timeout
+                    for attr in ['idle_timeout', 'timeout', '_timeout', 'auth_timeout']:
+                        val = getattr(obj, attr, None)
+                        if isinstance(val, (int, float)) and 170 <= val <= 190:
+                            setattr(obj, attr, new_timeout)
+                            log.msg(f"Forced update of {attr} on {klass_name} from {val} to {new_timeout}")
+
+                    if "Transport" in klass_name and getattr(obj, 'connected', False):
                         if hasattr(obj, 'resetTimeout'):
-                            obj.resetTimeout()
-                        
-                        # Directly manipulate Twisted's IDelayedCall if present
-                        timeout_call = getattr(obj, '_timeoutCall', None)
-                        if timeout_call and hasattr(timeout_call, 'reset'):
                             try:
-                                timeout_call.reset(new_timeout)
+                                obj.resetTimeout()
                             except Exception:
                                 pass
-
-                        # Signal activity to the protocol/shell if possible
-                        if hasattr(obj, 'protocol'):
-                            proto = obj.protocol
-                            for attr in ['idle_timeout', 'timeout']:
-                                if hasattr(proto, attr):
-                                    setattr(proto, attr, new_timeout)
-                            if hasattr(proto, 'resetTimeout'):
+                        
+                        # Directly manipulate Twisted's IDelayedCall if present
+                        for tc_attr in ['_timeoutCall', 'timeoutCall', 'timer']:
+                            timeout_call = getattr(obj, tc_attr, None)
+                            if timeout_call and hasattr(timeout_call, 'reset'):
                                 try:
-                                    proto.resetTimeout()
+                                    timeout_call.reset(new_timeout)
+                                    log.msg(f"Reset {tc_attr} on {klass_name} to {new_timeout}s")
                                 except Exception:
                                     pass
 
-                        log.msg(f"Forced timeout reset on {klass_name} to {new_timeout}s.")
-
-            # 2. Twisted Reactor-level reset (for any remaining rogue timers)
+            # 2. Twisted Reactor-level reset
             from twisted.internet import reactor
             for call in reactor.getDelayedCalls():
                 if not call.active():
                     continue
                 
-                func = call.getFunction()
+                # In Twisted, the function is stored in .func (usually)
+                func = getattr(call, 'func', None)
+                if func is None:
+                    continue
+
                 func_name = getattr(func, '__name__', str(func)).lower()
                 
-                # Identify timeout-related calls by function name
-                if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection"]):
+                # Check for Cowrie specific timeout functions
+                # Common ones: 'timedOut', 'idleTimeout', 'connectionLost', 'loseConnection'
+                if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection", "connectionlost"]):
                     try:
-                        call.reset(new_timeout)
-                        log.msg(f"Twisted reactor timer reset: {func_name} -> {new_timeout}s")
-                    except Exception:
-                        pass
+                        # Check if the current delay is around 180 or less
+                        remaining = call.getTime() - reactor.seconds()
+                        if remaining < 200: # Only reset if it's "suspiciously" short
+                            call.reset(new_timeout)
+                            log.msg(f"Twisted reactor timer reset: {func_name} (was {remaining:.1f}s left) -> {new_timeout}s")
+                    except Exception as e:
+                        log.msg(f"Failed to reset reactor call {func_name}: {e}")
 
         except Exception as te:
             log.err(f"Broad-spectrum timeout reset failed: {te}")
