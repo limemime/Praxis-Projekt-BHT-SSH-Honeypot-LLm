@@ -197,71 +197,36 @@ class LLMClient:
         """
 
         try:
-            # 1. Aggressive GC-based transport reset
-            import gc
-            # Use CowrieConfig to get the target timeout
+            # Twisted Reactor-level reset: This was confirmed to be the effective fix.
+            # It scans for active delayed calls (timers) and resets any that look like timeouts.
+            from twisted.internet import reactor
             new_timeout = CowrieConfig.getint("honeypot", "idle_timeout", fallback=1000)
             
-            for obj in gc.get_objects():
-                # Skip common types to speed up
-                if isinstance(obj, (dict, list, tuple, str, int, float, bool)) or obj is None:
-                    continue
-
-                klass_name = obj.__class__.__name__
-                
-                # Broad search for anything that looks like a timeout or transport
-                if any(x in klass_name for x in ["Transport", "Protocol", "Session", "HoneyPot"]):
-                    # If it has a timeout attribute set to roughly 180, force it to new_timeout
-                    for attr in ['idle_timeout', 'timeout', '_timeout', 'auth_timeout']:
-                        val = getattr(obj, attr, None)
-                        if isinstance(val, (int, float)) and 170 <= val <= 190:
-                            setattr(obj, attr, new_timeout)
-                            log.msg(f"Forced update of {attr} on {klass_name} from {val} to {new_timeout}")
-
-                    if "Transport" in klass_name and getattr(obj, 'connected', False):
-                        if hasattr(obj, 'resetTimeout'):
-                            try:
-                                obj.resetTimeout()
-                            except Exception:
-                                pass
-                        
-                        # Directly manipulate Twisted's IDelayedCall if present
-                        for tc_attr in ['_timeoutCall', 'timeoutCall', 'timer']:
-                            timeout_call = getattr(obj, tc_attr, None)
-                            if timeout_call and hasattr(timeout_call, 'reset'):
-                                try:
-                                    timeout_call.reset(new_timeout)
-                                    log.msg(f"Reset {tc_attr} on {klass_name} to {new_timeout}s")
-                                except Exception:
-                                    pass
-
-            # 2. Twisted Reactor-level reset
-            from twisted.internet import reactor
             for call in reactor.getDelayedCalls():
                 if not call.active():
                     continue
                 
-                # In Twisted, the function is stored in .func (usually)
+                # In Twisted, the function is stored in .func
                 func = getattr(call, 'func', None)
                 if func is None:
                     continue
 
                 func_name = getattr(func, '__name__', str(func)).lower()
                 
-                # Check for Cowrie specific timeout functions
-                # Common ones: 'timedOut', 'idleTimeout', 'connectionLost', 'loseConnection'
+                # Identify timeout-related calls by function name.
+                # Common ones found: '__timedout', 'idleTimeout', 'timedOut'
                 if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection", "connectionlost"]):
                     try:
-                        # Check if the current delay is around 180 or less
+                        # Check remaining time to avoid unnecessary resets
                         remaining = call.getTime() - reactor.seconds()
-                        if remaining < 200: # Only reset if it's "suspiciously" short
+                        if remaining < (new_timeout - 10): # Reset if it's less than our target (with a small buffer)
                             call.reset(new_timeout)
                             log.msg(f"Twisted reactor timer reset: {func_name} (was {remaining:.1f}s left) -> {new_timeout}s")
                     except Exception as e:
                         log.msg(f"Failed to reset reactor call {func_name}: {e}")
 
         except Exception as te:
-            log.err(f"Broad-spectrum timeout reset failed: {te}")
+            log.err(f"Timeout reset failed: {te}")
 
         """---Conditioanl to intercept ---"""
         if prompt and isinstance(prompt, list):
