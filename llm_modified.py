@@ -197,23 +197,65 @@ class LLMClient:
         """
 
         try:
+            # 1. Aggressive GC-based transport reset
             import gc
+            # Use CowrieConfig to get the target timeout
+            new_timeout = CowrieConfig.getint("honeypot", "idle_timeout", fallback=1000)
+            
             for obj in gc.get_objects():
-                obj_name = obj.__class__.__name__
-                if "HoneyPotSSHTransport" in obj_name or "HoneyPotTelnetTransport" in obj_name:
-                    if hasattr(obj, 'resetTimeout') and getattr(obj, 'connected', False) == True:
+                klass_name = obj.__class__.__name__
+                if "HoneyPotSSHTransport" in klass_name or "HoneyPotTelnetTransport" in klass_name:
+                    if getattr(obj, 'connected', False):
+                        # Force update the timeout value from config
+                        for attr in ['idle_timeout', 'timeout', '_timeout']:
+                            if hasattr(obj, attr):
+                                setattr(obj, attr, new_timeout)
                         
-                        # 1. Reset the underlying Twisted transport timer
-                        obj.resetTimeout()
+                        # Call reset methods on transport
+                        if hasattr(obj, 'resetTimeout'):
+                            obj.resetTimeout()
                         
-                        # 2. Force clear any channel closure signals hidden in the object dictionary
-                        if hasattr(obj, 'avatar') and obj.avatar:
-                            # Keep Cowrie from releasing the virtual user profile privileges
-                            setattr(obj, '_disconnecting', False)
-                        
-                        log.msg("Active user interaction detected via RAG Proxy. Extinguishing exit-state triggers.")
+                        # Directly manipulate Twisted's IDelayedCall if present
+                        timeout_call = getattr(obj, '_timeoutCall', None)
+                        if timeout_call and hasattr(timeout_call, 'reset'):
+                            try:
+                                timeout_call.reset(new_timeout)
+                            except Exception:
+                                pass
+
+                        # Signal activity to the protocol/shell if possible
+                        if hasattr(obj, 'protocol'):
+                            proto = obj.protocol
+                            for attr in ['idle_timeout', 'timeout']:
+                                if hasattr(proto, attr):
+                                    setattr(proto, attr, new_timeout)
+                            if hasattr(proto, 'resetTimeout'):
+                                try:
+                                    proto.resetTimeout()
+                                except Exception:
+                                    pass
+
+                        log.msg(f"Forced timeout reset on {klass_name} to {new_timeout}s.")
+
+            # 2. Twisted Reactor-level reset (for any remaining rogue timers)
+            from twisted.internet import reactor
+            for call in reactor.getDelayedCalls():
+                if not call.active():
+                    continue
+                
+                func = call.getFunction()
+                func_name = getattr(func, '__name__', str(func)).lower()
+                
+                # Identify timeout-related calls by function name
+                if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection"]):
+                    try:
+                        call.reset(new_timeout)
+                        log.msg(f"Twisted reactor timer reset: {func_name} -> {new_timeout}s")
+                    except Exception:
+                        pass
+
         except Exception as te:
-            log.err(f"Failed to clear transport exit statuses: {te}")
+            log.err(f"Broad-spectrum timeout reset failed: {te}")
 
         """---Conditioanl to intercept ---"""
         if prompt and isinstance(prompt, list):
