@@ -214,14 +214,17 @@ class LLMClient:
                 func_name = getattr(func, '__name__', str(func)).lower()
                 
                 # Identify timeout-related calls by function name.
-                # Common ones found: '__timedout', 'idleTimeout', 'timedOut'
                 if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection", "connectionlost"]):
                     try:
+                        # Identify the object owning the function (if it's a bound method)
+                        owner = getattr(func, '__self__', None)
+                        owner_name = owner.__class__.__name__ if owner else "Global"
+                        
                         # Check remaining time to avoid unnecessary resets
                         remaining = call.getTime() - reactor.seconds()
-                        if remaining < (new_timeout - 10): # Reset if it's less than our target (with a small buffer)
+                        if remaining < (new_timeout - 20): # Using 20s buffer to be sure
                             call.reset(new_timeout)
-                            log.msg(f"Twisted reactor timer reset: {func_name} (was {remaining:.1f}s left) -> {new_timeout}s")
+                            log.msg(f"Twisted reactor timer reset: {owner_name}.{func_name} (was {remaining:.1f}s left) -> {new_timeout}s")
                     except Exception as e:
                         log.msg(f"Failed to reset reactor call {func_name}: {e}")
 
