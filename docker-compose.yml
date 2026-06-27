@@ -326,10 +326,10 @@ services:
       - "2224:2222"
       - "2225:2223"
    volumes:
-      - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
-      - ./logs:/cowrie/cowrie-git/var/log/cowrie
-      - ./downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
-      - ./llm_modified.py:/cowrie/cowrie-git/src/cowrie/llm/llm.py
+     - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+     - ./logs:/var/log/cowrie:z
+     - ./downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
+     - ./llm_modified.py:/cowrie/cowrie-git/src/cowrie/llm/llm.py
    networks:
       - elastic
 
