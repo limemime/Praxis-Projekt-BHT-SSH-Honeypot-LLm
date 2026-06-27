@@ -1,0 +1,282 @@
+# ABOUTME: LLM client for communicating with OpenAI-compatible APIs.
+# ABOUTME: Sends shell commands to an LLM and returns simulated responses.
+
+from __future__ import annotations
+
+import json
+import os
+import urllib.parse
+from typing import TYPE_CHECKING, Any
+
+from twisted.internet import defer, protocol, reactor
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.endpoints import HostnameEndpoint
+from twisted.python import failure as tw_failure
+from twisted.python import log
+from twisted.web.client import (
+    Agent,
+    HTTPConnectionPool,
+    ProxyAgent,
+    _HTTP11ClientFactory,
+)
+from twisted.web.http_headers import Headers
+from twisted.web.iweb import IBodyProducer, IResponse
+from zope.interface import implementer
+
+from cowrie.core.config import CowrieConfig
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+@implementer(IBodyProducer)
+class StringProducer:
+    """
+    Feeds a request body to the HTTP client.
+    """
+
+    def __init__(self, body: str) -> None:
+        self.body = body.encode("utf-8")
+        self.length = len(self.body)
+
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return defer.succeed(None)
+
+    def pauseProducing(self) -> None:
+        pass
+
+    def resumeProducing(self) -> None:
+        pass
+
+    def stopProducing(self) -> None:
+        pass
+
+
+class SimpleResponseReceiver(protocol.Protocol):
+    """
+    Collects the response body from an HTTP response.
+    """
+
+    def __init__(self, status_code: int, d: defer.Deferred) -> None:
+        self.status_code = status_code
+        self.buf = b""
+        self.d = d
+
+    def dataReceived(self, data: bytes) -> None:
+        self.buf += data
+
+    def connectionLost(self, reason: tw_failure.Failure = protocol.connectionDone) -> None:
+        self.d.callback((self.status_code, self.buf))
+
+
+class QuietHTTP11ClientFactory(_HTTP11ClientFactory):
+    """
+    Silences factory start/stop log messages.
+    """
+
+    noisy = False
+
+
+class LLMClient:
+    """
+    Client for communicating with OpenAI-compatible LLM APIs.
+    """
+
+    def __init__(self) -> None:
+        self._conn_pool = HTTPConnectionPool(reactor)
+        self._conn_pool._factory = QuietHTTP11ClientFactory
+
+        self.api_key = CowrieConfig.get("llm", "api_key", fallback="")
+        self.model = CowrieConfig.get("llm", "model", fallback="gpt-4o-mini")
+        self.host = CowrieConfig.get("llm", "host", fallback="https://api.openai.com")
+        self.path = CowrieConfig.get("llm", "path", fallback="/v1/chat/completions")
+        self.max_tokens = CowrieConfig.getint("llm", "max_tokens", fallback=500)
+        self.temperature = CowrieConfig.getfloat("llm", "temperature", fallback=0.7)
+        self.debug = CowrieConfig.getboolean("llm", "debug", fallback=False)
+
+        proxy_url = (
+            os.environ.get("https_proxy")
+            or os.environ.get("HTTPS_PROXY")
+            or os.environ.get("http_proxy")
+            or os.environ.get("HTTP_PROXY")
+        )
+        self.agent: Agent | ProxyAgent
+        if proxy_url:
+            parsed = urllib.parse.urlparse(proxy_url)
+            proxy_endpoint = HostnameEndpoint(
+                reactor, parsed.hostname or "localhost", parsed.port or 8080
+            )
+            self.agent = ProxyAgent(proxy_endpoint, reactor, pool=self._conn_pool)
+            log.msg(f"LLM using proxy: {parsed.hostname}:{parsed.port}")
+        else:
+            self.agent = Agent(reactor, pool=self._conn_pool)
+
+        if not self.api_key:
+            log.msg("WARNING: No LLM API key configured in [llm] section")
+
+    def _build_headers(self) -> Headers:
+        """Build HTTP headers with authentication."""
+        return Headers(
+            {
+                b"Content-Type": [b"application/json"],
+                b"Authorization": [f"Bearer {self.api_key}".encode()],
+            }
+        )
+
+    def _format_request_body(self, prompt: list[str]) -> dict:
+        """Structure the request body for OpenAI chat completions API."""
+        messages = []
+        for i, message in enumerate(prompt):
+            if i == 0:
+                # First message is our system prompt
+                messages.append({"role": "system", "content": message})
+            elif message.startswith("User:"):
+                content = message[5:].strip()
+                messages.append({"role": "user", "content": content})
+            elif message.startswith("System:"):
+                content = message[7:].strip()
+                messages.append({"role": "assistant", "content": content})
+            else:
+                messages.append({"role": "user", "content": message})
+
+        return {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+
+    def _handle_response_body(self, response: IResponse) -> Deferred[tuple[int, bytes]]:
+        """Extract the response body from the HTTP response."""
+        d: Deferred[tuple[int, bytes]] = defer.Deferred()
+        response.deliverBody(SimpleResponseReceiver(response.code, d))
+        return d
+
+    def _handle_connection_error(
+        self, err: tw_failure.Failure
+    ) -> tuple[int, bytes]:
+        """Handle connection errors."""
+        err.trap(Exception)
+        return (500, err.getErrorMessage().encode("utf-8"))
+
+    def _send_request(self, prompt: list[str]) -> Deferred[tuple[int, bytes]]:
+        """Send request to the LLM API."""
+        request_body = self._format_request_body(prompt)
+
+        if self.debug:
+            log.msg(f"LLM request: {json.dumps(request_body, indent=2)}")
+
+        url = f"{self.host}{self.path}"
+        d: Deferred[Any] = self.agent.request(
+            b"POST",
+            url.encode("utf-8"),
+            headers=self._build_headers(),
+            bodyProducer=StringProducer(json.dumps(request_body)),
+        )
+
+        d.addCallbacks(self._handle_response_body, self._handle_connection_error)
+        return d
+
+    @inlineCallbacks
+    def get_response(
+        self, prompt: list[str]
+    ) -> Generator[Deferred[Any], Any, str]:
+        """
+        Get a response from the LLM for the given prompt.
+
+        Args:
+            prompt: List of messages. First is system prompt, rest are
+                    conversation history with "User:" and "System:" prefixes.
+
+        Returns:
+            The LLM's response text, or empty string on error.
+        """
+        """ ---Fixing Tiemout due to inactivity, sedd alive signal
+
+        """
+
+        try:
+            # Twisted Reactor-level reset: This was confirmed to be the effective fix.
+            # It scans for active delayed calls (timers) and resets any that look like timeouts.
+            from twisted.internet import reactor
+            new_timeout = CowrieConfig.getint("honeypot", "idle_timeout", fallback=1000)
+            
+            for call in reactor.getDelayedCalls():
+                if not call.active():
+                    continue
+                
+                # In Twisted, the function is stored in .func
+                func = getattr(call, 'func', None)
+                if func is None:
+                    continue
+
+                func_name = getattr(func, '__name__', str(func)).lower()
+                
+                # Identify timeout-related calls by function name.
+                if any(x in func_name for x in ["timeout", "timedout", "disconnect", "loseconnection", "connectionlost"]):
+                    try:
+                        # Identify the object owning the function (if it's a bound method)
+                        owner = getattr(func, '__self__', None)
+                        owner_name = owner.__class__.__name__ if owner else "Global"
+                        
+                        # Check remaining time to avoid unnecessary resets
+                        remaining = call.getTime() - reactor.seconds()
+                        if remaining < (new_timeout - 20): # Using 20s buffer to be sure
+                            call.reset(new_timeout)
+                            log.msg(f"Twisted reactor timer reset: {owner_name}.{func_name} (was {remaining:.1f}s left) -> {new_timeout}s")
+                    except Exception as e:
+                        log.msg(f"Failed to reset reactor call {func_name}: {e}")
+
+        except Exception as te:
+            log.err(f"Timeout reset failed: {te}")
+
+        """---Conditioanl to intercept ---"""
+        if prompt and isinstance(prompt, list):
+            last_message = prompt[-1].strip().lower()
+
+            if "exit" in last_message or "logout" in last_message:
+                log.msg("Exit command detected.Forcing disconnect")
+
+                """from twisted.cred.error import UnauthorizedLogin
+                raise UnauthorizedLogin("User requeste session termination.")"""
+               
+                try:
+                    import gc
+                    # Track down active Honeypot Transport sessions currently inside memory
+                    for obj in gc.get_objects():
+                        obj_name = obj.__class__.__name__
+                        if "HoneyPotSSHTransport" in obj_name or "HoneyPotTelnetTransport" in obj_name:
+                            # Verify it has a valid loseConnection method and run it
+                            if hasattr(obj, 'loseConnection') and getattr(obj, 'connected', False) == True:
+                                # Verify the underlying socket writer state exists to prevent NoneType errors
+                                if hasattr(obj, 'transport') and obj.transport is not None:
+                                    obj.loseConnection()
+                                    log.msg(f"Successfully dropped active session object: {obj_name}")
+                except Exception as e:
+                    log.err(f"Failed to drop session inside memory sweep: {e}")
+                
+                return ""  # Exit the loop sa
+                        
+
+        status_code, response = yield self._send_request(prompt)
+
+        if status_code != 200:
+            log.err(f"LLM API error (status {status_code}): {response.decode('utf-8')}")
+            return ""
+
+        try:
+            response_json = json.loads(response)
+        except json.JSONDecodeError as e:
+            log.err(f"Failed to parse LLM response: {e}")
+            return ""
+
+        if self.debug:
+            log.msg(f"LLM response: {json.dumps(response_json, indent=2)}")
+
+        if "choices" in response_json and len(response_json["choices"]) > 0:
+            content: str = response_json["choices"][0]["message"]["content"]
+            return content
+
+        log.err(f"Unexpected LLM response format: {response}")
+        return ""

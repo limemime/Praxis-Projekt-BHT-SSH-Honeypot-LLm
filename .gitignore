@@ -11,4 +11,5 @@ logstash_ingest_data/
 filebeat_ingest_data/
 
 
-
+# Env and files with passwords or keys
+.env
