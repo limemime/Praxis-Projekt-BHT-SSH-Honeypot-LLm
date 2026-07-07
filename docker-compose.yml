@@ -361,6 +361,8 @@ services:
 
  # ChromaDB stores our "knowledge base" (vulnerable Linux docs) as vectors for quick search
  chromadb:
+   depends_on:
+     - webapp
    container_name: chromadb
    image: chromadb/chroma:latest
    volumes:
