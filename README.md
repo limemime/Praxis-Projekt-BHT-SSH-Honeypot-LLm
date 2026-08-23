@@ -46,17 +46,19 @@ chmod +x test_script.exp
 
 
 ### Project Structure
-
+```
 ├── docker-compose.yml          # Orchestration for Cowrie, ELK, RAG proxy
 ├── cowrie.cfg                  # Honeypot configuration
 ├── .env                        # Environment variables (add HF token)
 ├── seed_db.py                  # Vector database initialization script
-├── llm_modify.py              # Modify Cowrie's default LLM settings
-├── test_script.exp            # Traffic generation test script
+├── llm_modify.py               # Modify Cowrie's default LLM settings
+├── test_script.exp             # Traffic generation test script
 └── rag-proxy/
-    ├── main.py                # RAG pipeline with LangChain
-    ├── Dockerfile             # RAG proxy container definition
-    └── requirements.txt       # Python dependencies
+  ├── main.py                   # RAG pipeline with LangChain
+  ├── Dockerfile                # RAG proxy container definition
+  └── requirements.txt          # Python dependencies
+```
+
 
 **Disclaimer:** Have fun and do not forget: This was a research project, so any use outside of research is your responsibility.
 
