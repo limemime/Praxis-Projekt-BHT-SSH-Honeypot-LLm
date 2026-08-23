@@ -7,6 +7,8 @@ This project integrates the Cowrie SSH honeypot with a local LLM and RAG system 
 DIt provides automated threat analysis and detection engineering for mid-sized companies seeking lightweight, cost-effective defensive measures against automated reconnaissance attacks and AI-powered intrusion attempts.
 
 ## How It Works
+This deployment is based on the developers's documentation on implementation with just a very few tweaks. So if any problem arises, go to the original source. 
+
 - **Tech Stack**: Cowrie SSH honeypot + ELK Stack (Elasticsearch, Logstash, Kibana) + HuggingFace/LangChain RAG proxy with ChromaDB vector database
 - **Architecture**: Attacker → SSH connection → Cowrie → RAG-LLM response → logs → ELK visualization → threat classification
 - **Key Features**: 
@@ -42,6 +44,20 @@ Generate test traffic with Expect script
 chmod +x test_script.exp
 ./test_script.exp
 
-Have fun and do not forget: This was a research project, so any use outside of research is your responsibility.
+
+### Project Structure
+
+├── docker-compose.yml          # Orchestration for Cowrie, ELK, RAG proxy
+├── cowrie.cfg                  # Honeypot configuration
+├── .env                        # Environment variables (add HF token)
+├── seed_db.py                  # Vector database initialization script
+├── llm_modify.py              # Modify Cowrie's default LLM settings
+├── test_script.exp            # Traffic generation test script
+└── rag-proxy/
+    ├── main.py                # RAG pipeline with LangChain
+    ├── Dockerfile             # RAG proxy container definition
+    └── requirements.txt       # Python dependencies
+
+**Disclaimer:** Have fun and do not forget: This was a research project, so any use outside of research is your responsibility.
 
   
